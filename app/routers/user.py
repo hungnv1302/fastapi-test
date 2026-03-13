@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Response, status, HTTPException, Depends, APIRouter
+
+from app import oauth2
 from .. import models, schemas, utils
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -20,6 +22,34 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
   db.refresh(new_user)
   return new_user
 
+@router.put('/profile', response_model=schemas.UserOut)
+def update_profile(updated_user: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
+  update_data = updated_user.model_dump(exclude_unset=True)
+
+  if not update_data:
+    raise HTTPException(status_code = status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+  
+  user_query = db.query(models.User).filter(models.User.id == current_user.id)
+  user_query.update(update_data, synchronize_session=False)
+  db.commit()
+
+  updated = user_query.first()
+  return updated
+
+@router.put('/change-password')
+def change_password(passwords: schemas.ChangePassword, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
+  if not utils.verify(passwords.old_password, current_user.password):
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Old password is incorrect")
+  
+  if utils.verify(passwords.new_password, current_user.password):
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different from old password")
+  
+  hashed_password = utils.hash(passwords.new_password)
+  db.query(models.User).filter(models.User.id == current_user.id).update({"password": hashed_password}, synchronize_session=False)
+
+  db.commit()
+  return {"message": "Password updated successfully"}
+
 @router.get('/{id}', response_model=schemas.UserOut)
 def get_user(id: int, db:Session = Depends(get_db)):
   user = db.query(models.User).filter(models.User.id == id).first()
@@ -27,3 +57,4 @@ def get_user(id: int, db:Session = Depends(get_db)):
   if not user:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'user with id: {id} does not exist')
   return user
+

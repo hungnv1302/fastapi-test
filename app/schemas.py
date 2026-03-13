@@ -41,6 +41,14 @@ class UserCreate(BaseModel):
   email: EmailStr
   password: str
 
+class UserUpdate(BaseModel):
+  email: Optional[EmailStr] = None
+  phone_number: Optional[str] = None
+
+class ChangePassword(BaseModel):
+  old_password: str
+  new_password: str
+
 class UserLogin(BaseModel):
   email: EmailStr
   password: str
